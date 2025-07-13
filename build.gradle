@@ -1,0 +1,50 @@
+plugins {
+    id 'application'
+}
+
+group = 'jp.classicorange'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // SLF4J API (通常は他のライブラリの推移的依存関係で入るが、明示しても良い)
+    implementation 'org.slf4j:slf4j-api:2.0.12'
+    implementation 'org.apache.logging.log4j:log4j-to-slf4j:2.20.0'
+    implementation 'ch.qos.logback:logback-classic:1.5.13'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+
+    //POI
+    implementation 'org.apache.poi:poi:5.2.5'         // HSSF for .xls
+    implementation 'org.apache.poi:poi-ooxml:5.4.0'   // XSSF for .xlsx
+
+
+}
+
+application {
+    mainClass = 'Main'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'Main'
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+test {
+    useJUnitPlatform()
+}
+
+configurations {
+    runtimeClasspath {
+        exclude group: 'ch.qos.logback', module: 'logback-classic'
+    }
+}
