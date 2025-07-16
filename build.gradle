@@ -19,9 +19,8 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
 
     //POI
-    implementation 'org.apache.poi:poi:5.2.5'         // HSSF for .xls
-    implementation 'org.apache.poi:poi-ooxml:5.4.0'   // XSSF for .xlsx
-
+    implementation("org.apache.poi:poi:5.4.1")
+    implementation("org.apache.poi:poi-ooxml:5.4.1")
 
 }
 

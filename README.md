@@ -11,7 +11,7 @@
 ## ✅ 主な機能
 
 - 複数の Excel ファイル内の **セル／シェイプの文字列を検索**
-- キーワードの **完全一致／曖昧一致（FUZZY）** 対応
+- キーワードの **完全一致(STRICT)／曖昧一致（FUZZY）** 対応
 - **検索＋置換**（オプション機能）
 - 検索結果を Excel に貼り付け、**HYPERLINK関数等使いジャンプ可能**
 
@@ -28,7 +28,7 @@
 ## 🚀 実行方法
 
 ```bash
-build\install\SearchDocs\bin\SearchDocs.bat testData\ "Jakarta" FUZZY
+build\install\ExcelSheetScan\bin\ExcelSheetScan.bat testData\ "Jakarta" FUZZY
 ```
 
 出力例:
@@ -52,7 +52,7 @@ build\install\SearchDocs\bin\SearchDocs.bat testData\ "Jakarta" FUZZY
 
 ```bash
 .\gradlew build install
-.\build\install\SearchDocs\bin\SearchDocs.bat .\testData\ "Jakarta" "FUZZY" > result.txt
+.\build\install\ExcelSheetScan\bin\ExcelSheetScan.bat .\testData\ "Jakarta" "FUZZY" > result.txt
 ```
 
 * `result.txt` を Excel に貼り付け
@@ -65,7 +65,7 @@ build\install\SearchDocs\bin\SearchDocs.bat testData\ "Jakarta" FUZZY
 例：
 
 ```
-C:\...\SearchDocs\testData\dir01\テスト用D01F01.xlsx#Sheet1!E37
+C:\...\ExcelSheetScan\testData\dir01\テスト用D01F01.xlsx#Sheet1!E37
 ```
 
 ---
@@ -93,7 +93,7 @@ SLF4J(I): Connected with provider of type [ch.qos.logback.classic.spi.LogbackSer
 ## 📁 フォルダ構成例
 
 ```
-SearchDocs/
+ExcelSheetScan/
 ├─ build/
 ├─ docker/
 ├─ testData/
