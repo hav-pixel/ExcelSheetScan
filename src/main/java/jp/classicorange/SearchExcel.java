@@ -3,7 +3,6 @@ package jp.classicorange;
 import jp.classicorange.types.SearchMode;
 import jp.classicorange.utils.CheckParameter;
 import jp.classicorange.utils.ExcelUtils;
-import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.hssf.usermodel.*;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.WorkbookUtil;
@@ -17,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,7 +40,6 @@ public class SearchExcel {
 
     private SXSSFWorkbook sxssfWorkbook ;
     private SXSSFSheet sxssfSheet ;
-    private CreationHelper createHelper;
 
 
     /**
@@ -85,7 +82,6 @@ public class SearchExcel {
         int idx = sxssfWorkbook.getSheetIndex(sxssfSheet);
         sxssfWorkbook.setActiveSheet(idx);
         sxssfWorkbook.setSelectedTab(idx);
-        createHelper = sxssfWorkbook.getCreationHelper();
 
         // シートにヘッダー生成
         setHeader();
