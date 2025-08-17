@@ -77,7 +77,7 @@ public class MakeTestExcel {
                         workbook.write(out);
                     }
                     workbook.close();
-                    System.out.println(filename + " を作成しました！");
+                    System.out.println("テストデータ " + filename + " を作成しました！");
                 }
             }
         } catch (Exception e) {

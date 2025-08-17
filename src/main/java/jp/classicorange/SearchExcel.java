@@ -3,13 +3,20 @@ package jp.classicorange;
 import jp.classicorange.types.SearchMode;
 import jp.classicorange.utils.CheckParameter;
 import jp.classicorange.utils.ExcelUtils;
+import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.hssf.usermodel.*;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.WorkbookUtil;
+import org.apache.poi.xssf.streaming.SXSSFRow;
+import org.apache.poi.xssf.streaming.SXSSFSheet;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,6 +40,11 @@ public class SearchExcel {
     private static final Logger log = LoggerFactory.getLogger(SearchExcel.class);
     private CheckParameter.SearchCond cond;
 
+    private SXSSFWorkbook sxssfWorkbook ;
+    private SXSSFSheet sxssfSheet ;
+    private CreationHelper createHelper;
+
+
     /**
      * 本処理。
      *
@@ -42,12 +54,56 @@ public class SearchExcel {
         //検索条件 をセット
         cond = CheckParameter.checkParameter(args);
 
-        System.out.println("File Index / Sheet Index / Cell Index / File Path / Sheet Name / Cell Name / value");
+        //結果保存ファイル名
+        String resultFileName = "result.xlsx"; //TODO ファイル存在時ナンバリング
+
+        //Workbookファイル準備
+        File f = new File(resultFileName);
+        if(f.exists()) {
+            FileInputStream fis = new FileInputStream(f);
+            Workbook wb = WorkbookFactory.create(fis);
+            if (wb instanceof XSSFWorkbook) {
+                // xlsx → SXSSFWorkbookにラップして追記可能
+                sxssfWorkbook = new SXSSFWorkbook((XSSFWorkbook) wb, 100);
+            } else if (wb instanceof HSSFWorkbook) {
+                // xls → SXSSFは不可、HSSFWorkbookのまま扱う
+                System.out.println("警告: .xls ファイルは SXSSFWorkbook 非対応です。HSSFWorkbookを使用します。");
+                // 必要なら変換処理を入れる
+                // sxssfWorkbook = convertHssfToSxssf((HSSFWorkbook) wb);
+            } else {
+                throw new IllegalStateException("未知のWorkbook種類");
+            }
+        }else{
+            sxssfWorkbook = new SXSSFWorkbook(100);
+        }
+        String formatted = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        // Excelのシート名に使える文字をセット。禁止文字は_に置換
+        sxssfSheet = sxssfWorkbook.createSheet(WorkbookUtil.createSafeSheetName(args[1]+" "+formatted, '_'));
+        // 一番左に移動
+        sxssfWorkbook.setSheetOrder(sxssfSheet.getSheetName(), 0);
+        // アクティブシートを新シートに
+        int idx = sxssfWorkbook.getSheetIndex(sxssfSheet);
+        sxssfWorkbook.setActiveSheet(idx);
+        sxssfWorkbook.setSelectedTab(idx);
+        createHelper = sxssfWorkbook.getCreationHelper();
+
+        // シートにヘッダー生成
+        setHeader();
 
         // 検索の実行
         searchDir(cond.searchDirPath());
 
+        // 結果 保存
+        try (FileOutputStream fos = new FileOutputStream(resultFileName)) {
+            sxssfWorkbook.write(fos);
+        }finally {
+            // 結果ファイル閉じる
+            sxssfWorkbook.close();
+        }
+
+
     }
+
 
     /**
      * 指定したパスを検索する。
@@ -103,18 +159,18 @@ public class SearchExcel {
     /**
      * 対象のエクセルシートから文字列を検索し、リストに格納します。
      *
-     * @param aFile ファイルオブジェクト
+     * @param file ファイルオブジェクト
      */
-    private void searchWord(int fileIndex,File aFile) throws Exception {
+    private void searchWord(int fileIndex, File file) throws Exception {
 
-        log.info("個別検索開始 : {}",aFile.getAbsolutePath());
+        log.info("個別検索開始 : {}",file.getAbsolutePath());
 
         SearchMode searchMode = cond.searchMode();
         String searchWord = cond.searchWord() ;
         String replaceWord = cond.replaceWord() ;
 
         // Excelファイルの読込み
-        InputStream inputStream = new FileInputStream(aFile);
+        InputStream inputStream = new FileInputStream(file);
         Workbook workbook;
         try {
             workbook = WorkbookFactory.create(inputStream);
@@ -127,126 +183,131 @@ public class SearchExcel {
         int numberOfSheets = workbook.getNumberOfSheets();
         // シート枚数分ループ処理
         for (int sheetIndex = 0; sheetIndex < numberOfSheets; sheetIndex++) {
-            StringBuilder sb = new StringBuilder();
+
+            String path = file.getAbsolutePath();
             // シート
             Sheet sheet = workbook.getSheetAt(sheetIndex);
-            // シート名
-            String sheetName = sheet.getSheetName();
-            // シートの最終行
-            int lastRowNum = sheet.getLastRowNum();
-            // 対象ファイルの絶対パス
-            String absPath = aFile.getAbsolutePath();
-
             //シェープ
-            ArrayList<HitRecord> hits = searchShape(sheet, searchWord, replaceWord, searchMode);
-            if(hits!=null && !hits.isEmpty()){
-                for (HitRecord hit: hits) {
-                    appendRecord(
-                        sb, fileIndex,sheetIndex,-1,
-                        absPath,sheetName,hit.cellPos(),
-                        hit.text(),
-                        hit.replaced()
-                    );
-                }
-            }
+            searchShape(
+                fileIndex, path,
+                sheet, searchWord, replaceWord, searchMode);
+            //セル
+            searchCell(fileIndex, sheetIndex,
+                sheet, searchWord, replaceWord, searchMode,
+                path);
 
-            int cellIndex=0;
-            // 最終行までループ処理
-            for (int j = 0; j <= lastRowNum; j++) {
-                // 行の取得
-                Row row = sheet.getRow(j);
-                if (row == null) continue;
-
-                // 行内の最後のセルの位置
-                short lastCellNum = row.getLastCellNum();
-                // 行内の最後のセルまでループ処理
-                for (int k = 0; k < lastCellNum; k++) {
-                    // セルを取得
-                    Cell cell = row.getCell(k);
-                    if (cell == null) continue;
-                    // セルの値を文字列へ変換
-                    String original = ExcelUtils.getStringValue(cell);
-
-                    if (original.contains(searchWord)) {
-                        // 置換処理を実行
-                        String result=replaceWord(cell,searchWord,replaceWord, searchMode);
-                        // 結果出力
-                        appendRecord( sb, fileIndex, sheetIndex, cellIndex++,
-                            absPath, sheetName, ExcelUtils.convertCellPos(j, k),
-                            original, result);
-                    }
-
-                    if (!sb.isEmpty() && !sb.toString().endsWith("\n")) {
-                        sb.append("\n");
-                    }
-                }
-            }
-            System.out.print(sb);
 
         }
 
-
-
-        // 上書き保存
+        // 置換、上書き保存
         if(replaceWord != null){
-            FileOutputStream outputStream = new FileOutputStream(aFile);
+            FileOutputStream outputStream = new FileOutputStream(file);
             workbook.write(outputStream);
             outputStream.close();
         }
     }
 
 
+
+    public void searchCell(
+        int fileIndex,
+        int sheetIndex, Sheet sheet,
+        String searchWord, String replaceWord, SearchMode searchMode,
+        String absPath
+    ) throws Exception {
+        // シート名
+        String sheetName = sheet.getSheetName();
+        // シートの最終行
+        int lastRowNum = sheet.getLastRowNum();
+        // 対象ファイルの絶対パス
+
+        int cellIndex=0;
+        // 最終行までループ処理
+        for (int j = 0; j <= lastRowNum; j++) {
+            // 行の取得
+            Row row = sheet.getRow(j);
+            if (row == null) continue;
+
+            // 行内の最後のセルの位置
+            short lastCellNum = row.getLastCellNum();
+            // 行内の最後のセルまでループ処理
+            for (int k = 0; k < lastCellNum; k++) {
+                // セルを取得
+                Cell cell = row.getCell(k);
+                if (cell == null) continue;
+                // セルの値を文字列へ変換
+                String original = ExcelUtils.getStringValue(cell);
+
+                if (original.contains(searchWord)) {
+                    // 置換処理を実行
+                    String result=replaceWord(cell,searchWord,replaceWord, searchMode);
+                    // 結果出力
+                    appendRecord( fileIndex, sheetIndex, cellIndex++,
+                        absPath, sheetName, ExcelUtils.convertCellPos(j, k),
+                        original, result);
+                }
+
+//                if (!sb.isEmpty() && !sb.toString().endsWith("\n")) {
+//                    sb.append("\n");
+//                }
+            }
+        }
+    }
+
+
+
+
+    private void setHeader() {
+        SXSSFRow row = sxssfSheet.createRow(sxssfSheet.getLastRowNum() + 1);
+        int c=0;
+        row.createCell(c++).setCellValue("fileIndex");
+        row.createCell(c++).setCellValue("sheetIndex");
+        row.createCell(c++).setCellValue("cellIndex");
+        row.createCell(c++).setCellValue("filePath");
+        row.createCell(c++).setCellValue("sheetName");
+        row.createCell(c++).setCellValue("position");
+        row.createCell(c++).setCellValue("value");
+        row.createCell(c++).setCellValue("replaced");
+        row.createCell(c++).setCellValue("link");
+    }
+
+
     /**
      * 文字列バッファにファイルパス、シート名、セルの位置情報、値を設定して返却する。
      *
-     * @param sb 文字列バッファ
-     * @param aFilePath ファイルパス
-     * @param aSheetName シート名
-     * @param aPosition セルの位置情報
-     * @param aValue セルの値
+     * @param fileIndex fileIndex
+     * @param sheetIndex sheetIndex
+     * @param cellIndex cellIndex
+     * @param filePath ファイルパス
+     * @param sheetName シート名
+     * @param position セルの位置情報
+     * @param value セルの値
      */
     public void appendRecord(
-        StringBuilder sb,
-        String fileIndex,
-        String sheetIndex,
-        String cellIndex,
-        String aFilePath,
-        String aSheetName,
-        String aPosition,
-        String aValue,
-        String aReplaced
-    ) {
-        sb.append(fileIndex);
-        sb.append("\t");
-        sb.append(sheetIndex);
-        sb.append("\t");
-        sb.append(cellIndex);
-        sb.append("\t");
-        sb.append(aFilePath);
-        sb.append("\t");
-        sb.append(aSheetName);
-        sb.append("\t");
-        sb.append(aPosition);
-        sb.append("\t");
-        sb.append(aValue);
-        sb.append("\t");
-        sb.append(aReplaced);
-        sb.append("\n");
-    }
-
-    public void appendRecord(
-        StringBuilder sb,
         int fileIndex,
         int sheetIndex,
         int cellIndex,
-        String aFilePath,
-        String aSheetName,
-        String aPosition,
-        String aValue,
-        String aReplaced
+        String filePath,
+        String sheetName,
+        String position,
+        String value,
+        String replaced
     ) {
-        appendRecord(sb,fileIndex+"",sheetIndex+"",cellIndex+"",aFilePath,aSheetName,aPosition,aValue,aReplaced);
+        int c=0;
+        SXSSFRow row = sxssfSheet.createRow(sxssfSheet.getLastRowNum() + 1);
+        int r = row.getRowNum() + 1;
+        row.createCell(c++).setCellValue(fileIndex);
+        row.createCell(c++).setCellValue(sheetIndex);
+        row.createCell(c++).setCellValue(cellIndex);
+        row.createCell(c++).setCellValue(filePath);
+        row.createCell(c++).setCellValue(sheetName);
+        row.createCell(c++).setCellValue(position);
+        row.createCell(c++).setCellValue(value);
+        row.createCell(c++).setCellValue(replaced);
+        Cell cell = row.createCell(c++);
+        cell.setCellFormula(String.format("HYPERLINK(D%s & \"#'\" & E%s & \"'!\" & F%s, \"LINK\")",r,r,r));
     }
+
 
 
     /**
@@ -255,15 +316,12 @@ public class SearchExcel {
      *
      * @param sheet Sheet
      * @param searchWord 検索ワード
-     * @return 検索結果のリスト
      */
-    public ArrayList<HitRecord> searchShape(Sheet sheet, String searchWord, String replaceWord, SearchMode searchMode) throws Exception {
-
-        ArrayList<HitRecord> shapeList = new ArrayList<>();
+    public void searchShape(int fileIndex, String filePath, Sheet sheet, String searchWord, String replaceWord, SearchMode searchMode) throws Exception {
 
         if (sheet instanceof XSSFSheet xssfSheet) {
             XSSFDrawing drawing = xssfSheet.getDrawingPatriarch();
-            if (drawing == null) return shapeList;
+            if (drawing == null) return;
 
             for (Shape shape : drawing.getShapes()) {
                 if (!(shape instanceof XSSFSimpleShape xshape)) continue;
@@ -285,18 +343,23 @@ public class SearchExcel {
                 }
 
                 ClientAnchor anchor = (XSSFClientAnchor) xshape.getAnchor();
-                shapeList.add(new HitRecord(
-                    "",
+                String sheetName = sheet.getSheetName();
+
+                appendRecord(
+                    fileIndex,
+                    sheet.getWorkbook().getSheetIndex(sheetName),
+                    -1,
+                    filePath,
                     sheet.getSheetName(),
                     ExcelUtils.convertCellPos(anchor.getRow1(), anchor.getCol1()),
-                    text,
-                    result
-                ));
+                    result,
+                    replaceWord
+                );
             }
 
         } else if (sheet instanceof HSSFSheet hssfSheet) {
             HSSFPatriarch patriarch = hssfSheet.getDrawingPatriarch();
-            if (patriarch == null) return shapeList;
+            if (patriarch == null) return ;
 
             for (HSSFShape shape : patriarch.getChildren()) {
 
@@ -326,17 +389,21 @@ public class SearchExcel {
 
                 int row = clientAnchor.getRow1();
                 int col = clientAnchor.getCol1();
-                shapeList.add(new HitRecord(
-                    "",
+
+                String sheetName = sheet.getSheetName();
+                appendRecord(
+                    fileIndex,
+                    sheet.getWorkbook().getSheetIndex(sheetName),
+                    -1,
+                    filePath,
                     sheet.getSheetName(),
                     ExcelUtils.convertCellPos(row, col),
-                    text,
-                    result
-                ));
+                    result,
+                    replaceWord
+                );
             }
         }
 
-        return shapeList;
 
     }
 
@@ -367,12 +434,6 @@ public class SearchExcel {
             cell.setCellValue(result);
         }
         return result;
-    }
-
-
-
-    /** 検索した結果を格納するエンティティ */
-    public record HitRecord(String path, String sheetName, String cellPos, String text, String replaced) {
     }
 
 }
