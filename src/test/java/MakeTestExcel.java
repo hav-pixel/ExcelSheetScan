@@ -19,7 +19,11 @@ public class MakeTestExcel {
             String projectRoot = System.getProperty("user.dir");
             for (int dirNum = 1; dirNum <= 3; dirNum++) {
                 String dirPath = String.format("%s/testData/dir%02d/", projectRoot, dirNum);
-                new File(dirPath).mkdirs();
+                boolean mkdirs = new File(dirPath).mkdirs();
+                if(!mkdirs){
+                    System.err.println("ERROR:ディレクトリ生成失敗");
+                    System.exit(-1);
+                }
 
                 for (int fileNum = 1; fileNum <= 5; fileNum++) {
                     XSSFWorkbook workbook = new XSSFWorkbook();

@@ -264,7 +264,7 @@ public class SearchExcel {
         row.createCell(c++).setCellValue("position");
         row.createCell(c++).setCellValue("value");
         row.createCell(c++).setCellValue("replaced");
-        row.createCell(c++).setCellValue("link");
+        row.createCell(c).setCellValue("link");
     }
 
 
@@ -300,8 +300,7 @@ public class SearchExcel {
         row.createCell(c++).setCellValue(position);
         row.createCell(c++).setCellValue(value);
         row.createCell(c++).setCellValue(replaced);
-        Cell cell = row.createCell(c++);
-        cell.setCellFormula(String.format("HYPERLINK(D%s & \"#'\" & E%s & \"'!\" & F%s, \"LINK\")",r,r,r));
+        row.createCell(c).setCellFormula(String.format("HYPERLINK(D%s & \"#'\" & E%s & \"'!\" & F%s, \"LINK\")",r,r,r));
     }
 
 
