@@ -52,7 +52,7 @@ public class SearchExcel {
         cond = CheckParameter.checkParameter(args);
 
         //結果保存ファイル名
-        String resultFileName = "result.xlsx"; //TODO ファイル存在時ナンバリング
+        String resultFileName = "result.xlsx";
 
         //Workbookファイル準備
         File f = new File(resultFileName);
