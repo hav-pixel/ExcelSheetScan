@@ -63,10 +63,9 @@ public class SearchExcel {
                 // xlsx → SXSSFWorkbookにラップして追記可能
                 sxssfWorkbook = new SXSSFWorkbook((XSSFWorkbook) wb, 100);
             } else if (wb instanceof HSSFWorkbook) {
-                // xls → SXSSFは不可、HSSFWorkbookのまま扱う
-                System.out.println("警告: .xls ファイルは SXSSFWorkbook 非対応です。HSSFWorkbookを使用します。");
-                // 必要なら変換処理を入れる
-                // sxssfWorkbook = convertHssfToSxssf((HSSFWorkbook) wb);
+                // xls → SXSSFは不可なため、XSSFWorkbook経由で変換
+                System.out.println("警告: .xls ファイルは SXSSFWorkbook 非対応です。XSSFWorkbookに変換します。");
+                sxssfWorkbook = convertHssfToSxssf((HSSFWorkbook) wb);
             } else {
                 throw new IllegalStateException("未知のWorkbook種類");
             }
@@ -429,6 +428,55 @@ public class SearchExcel {
             cell.setCellValue(result);
         }
         return result;
+    }
+
+    private SXSSFWorkbook convertHssfToSxssf(HSSFWorkbook hssfWorkbook) {
+        XSSFWorkbook xssfWorkbook = new XSSFWorkbook();
+
+        for (int sheetIndex = 0; sheetIndex < hssfWorkbook.getNumberOfSheets(); sheetIndex++) {
+            HSSFSheet hssfSheet = hssfWorkbook.getSheetAt(sheetIndex);
+            XSSFSheet xssfSheet = xssfWorkbook.createSheet(hssfSheet.getSheetName());
+
+            xssfSheet.setDefaultColumnWidth(hssfSheet.getDefaultColumnWidth());
+            xssfSheet.setDefaultRowHeight(hssfSheet.getDefaultRowHeight());
+
+            int maxColumn = 0;
+            for (Row row : hssfSheet) {
+                XSSFRow xssfRow = xssfSheet.createRow(row.getRowNum());
+                xssfRow.setHeight(row.getHeight());
+
+                for (Cell cell : row) {
+                    XSSFCell xssfCell = xssfRow.createCell(cell.getColumnIndex(), cell.getCellType());
+                    copyCellValue(cell, xssfCell);
+                    maxColumn = Math.max(maxColumn, cell.getColumnIndex());
+                }
+            }
+
+            for (int col = 0; col <= maxColumn; col++) {
+                xssfSheet.setColumnWidth(col, hssfSheet.getColumnWidth(col));
+                xssfSheet.setColumnHidden(col, hssfSheet.isColumnHidden(col));
+            }
+
+            int mergedCount = hssfSheet.getNumMergedRegions();
+            for (int i = 0; i < mergedCount; i++) {
+                xssfSheet.addMergedRegion(hssfSheet.getMergedRegion(i));
+            }
+        }
+
+        return new SXSSFWorkbook(xssfWorkbook, 100);
+    }
+
+    private void copyCellValue(Cell source, Cell target) {
+        switch (source.getCellType()) {
+            case STRING -> target.setCellValue(source.getStringCellValue());
+            case NUMERIC -> target.setCellValue(source.getNumericCellValue());
+            case BOOLEAN -> target.setCellValue(source.getBooleanCellValue());
+            case FORMULA -> target.setCellFormula(source.getCellFormula());
+            case ERROR -> target.setCellErrorValue(source.getErrorCellValue());
+            case BLANK -> target.setBlank();
+            default -> {
+            }
+        }
     }
 
 }
